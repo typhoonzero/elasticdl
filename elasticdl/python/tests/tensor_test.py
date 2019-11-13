@@ -33,6 +33,30 @@ class TensorTest(unittest.TestCase):
         self.assertTrue(np.array_equal(indices, tensor.to_tf_tensor().indices))
         self.assertTrue(tensor.is_indexed_slices())
 
+        # Test tensor values, with indices and dense shape
+        arr_2d = np.ndarray([3, 4], dtype=np.float32)
+        indices = np.array([2, 0, 1])
+        dense_shape = (5, 4)
+        # wrong dense shape, should raise
+        self.assertRaisesRegex(
+            ValueError,
+            "Values and dense_shape have incompatible shape",
+            Tensor,
+            arr,
+            indices,
+            dense_shape=(4, 5),
+        )
+        tensor = Tensor(arr_2d, indices, dense_shape=dense_shape)
+        self.assertTrue(np.array_equal(arr_2d, tensor.values))
+        self.assertTrue(np.array_equal(indices, tensor.indices))
+        self.assertTrue(np.array_equal(arr_2d, tensor.to_tf_tensor().values))
+        self.assertTupleEqual(dense_shape, tensor.dense_shape)
+        self.assertTupleEqual(dense_shape, tensor.to_ndarray().shape)
+        for i, idx in enumerate(indices):
+            self.assertTrue(
+                np.array_equal(arr_2d[i], tensor.to_ndarray()[idx])
+            )
+
         # Test round trip
         # tensor to tensor PB
         tensor = Tensor(arr, indices, name="test")
@@ -53,7 +77,11 @@ class TensorTest(unittest.TestCase):
         indices = np.array([0, 2])
         name = "test"
         tensor = Tensor(values, indices, name)
-        self.assertRaises(NotImplementedError, tensor.to_ndarray)
+        self.assertRaisesRegex(
+            ValueError,
+            "convert IndexedSlices without dense shape",
+            tensor.to_ndarray,
+        )
         tensor = Tensor(values, name=name)
         self.assertTrue(np.allclose(values, tensor.to_ndarray()))
 
@@ -212,7 +240,12 @@ class TensorTest(unittest.TestCase):
 
         # convert a tensor_pb with sparse tensor to a ndarray, should raise
         pb = self._create_tensor_pb(values, indices)
-        self.assertRaises(NotImplementedError, tensor_pb_to_ndarray, pb)
+        self.assertRaisesRegex(
+            ValueError,
+            "convert IndexedSlices without dense shape",
+            tensor_pb_to_ndarray,
+            pb,
+        )
 
     def test_tensor_pb_to_tf_tensor(self):
         values = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], np.float32)

@@ -15,14 +15,16 @@ class Tensor(object):
     this structure saves them in the same way as `TensorFlow.IndexedSlices`.
     """
 
-    def __init__(self, values=None, indices=None, name=None):
+    def __init__(self, values=None, indices=None, name=None, dense_shape=None):
         """
         `Tensor` can save dense tensors and sparse tensors.
-        To pass in a dense tensor, `values` should be `numpy.ndarray` and
-            `indices` should be None.
+        To pass in a dense tensor, `values` should be `numpy.ndarray`,
+            `indices` and `dense_shape` should be None.
         There are two ways to pass in a sparse tensor:
-            * `values` is a `numpy.ndarray` and `indices` is a `numpy.ndarray`.
-            * `values` is a `TensorFlow.IndexedSlices` and `indices` is None.
+            * `values` is a `numpy.ndarray`, `indices` and `dense_shape` are
+                `numpy.ndarray`s.
+            * `values` is a `TensorFlow.IndexedSlices`, `indices` and
+                `dense_shape` are None.
 
         Args:
             values: A `numpy.ndarray` or `TensorFlow.IndexedSlices`.
@@ -30,8 +32,10 @@ class Tensor(object):
                 be None.
             indices: A `numpy.ndarray` or None.
             name: A python string.
+            dense_shape: The shape of the original tensor if `Tensor` saves a
+                sparse tensor.
         """
-        self.set(values, indices, name)
+        self.set(values, indices, name, dense_shape)
 
     @classmethod
     def from_tensor_pb(cls, tensor_pb):
@@ -43,26 +47,36 @@ class Tensor(object):
         deserialize_tensor_pb(tensor_pb, tensor)
         return tensor
 
-    def set(self, values=None, indices=None, name=None):
+    def set(self, values=None, indices=None, name=None, dense_shape=None):
         self.name = name
         if isinstance(values, tf.IndexedSlices):
-            if indices is not None:
+            if indices is not None or dense_shape is not None:
                 raise ValueError(
                     "When creating a Tensor object with values of type "
-                    "tf.IndexedSlices, indices must be None."
+                    "tf.IndexedSlices, indices and dense shape must be None."
                 )
-            if values.dense_shape is not None:
-                # TODO(yunjian.lmh): Support dense shape
-                pass
 
             self.values = values.values.numpy()
             self.indices = values.indices.numpy()
+            self.dense_shape = (
+                tuple(values.dense_shape)
+                if values.dense_shape is not None
+                else None
+            )
         else:
+            if dense_shape is not None and values.shape[1] != dense_shape[1]:
+                raise ValueError(
+                    "Values and dense_shape have incompatible shape, %s and "
+                    "%s." % (str(values.shape), str(dense_shape))
+                )
             self.values = (
                 values.numpy() if isinstance(values, tf.Tensor) else values
             )
             self.indices = (
                 indices.numpy() if isinstance(indices, tf.Tensor) else indices
+            )
+            self.dense_shape = (
+                tuple(dense_shape) if dense_shape is not None else None
             )
 
     def is_indexed_slices(self):
@@ -75,7 +89,9 @@ class Tensor(object):
 
     def to_tf_tensor(self):
         if self.is_indexed_slices():
-            return tf.IndexedSlices(self.values, self.indices)
+            return tf.IndexedSlices(
+                self.values, self.indices, self.dense_shape
+            )
         else:
             return tf.constant(self.values)
 
@@ -83,10 +99,14 @@ class Tensor(object):
         if self.is_indexed_slices():
             # Currently Tensor does not have a field representing dense shape,
             # thus can not convert it to numpy.ndarray.
-            raise NotImplementedError(
-                "Converting an ElasticDL Tensor object, which contains a "
-                "sparse tensor, to a numpy.ndarray is not supported."
-            )
+            if self.dense_shape is None:
+                raise ValueError(
+                    "Attempted to convert IndexedSlices without dense shape "
+                    "to numpy ndarray."
+                )
+            return tf.math.unsorted_segment_sum(
+                self.values, self.indices, self.dense_shape[0]
+            ).numpy()
         return self.values
 
     def __add__(self, other):
