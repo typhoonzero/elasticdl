@@ -19,13 +19,24 @@ def main():
         ],
     )
 
-    # TODO, create PS channels here
-    ps_addrs = args.ps_addrs.split(",")
-    # Just print ps_addrs out to avoid flake8 failure
-    # This print can be removed once we initialize ps_channels
-    # by using ps_addrs
-    print("Parameter server addresses are %s" % ps_addrs)
-    ps_channels = None
+    ps_channels = []
+    if args.ps_addrs:
+        ps_addrs = args.ps_addrs.split(",")
+        for addr in ps_addrs:
+            channel = grpc.insecure_channel(
+                addr,
+                options=[
+                    (
+                        "grpc.max_send_message_length",
+                        GRPC.MAX_SEND_MESSAGE_LENGTH,
+                    ),
+                    (
+                        "grpc.max_receive_message_length",
+                        GRPC.MAX_RECEIVE_MESSAGE_LENGTH,
+                    ),
+                ],
+            )
+            ps_channels.append(channel)
 
     logger = log_utils.get_logger(__name__)
 
