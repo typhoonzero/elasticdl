@@ -8,7 +8,7 @@ from elasticdl.python.worker.worker import Worker
 
 def main():
     args = parse_worker_args()
-    channel = grpc.insecure_channel(
+    master_channel = grpc.insecure_channel(
         args.master_addr,
         options=[
             ("grpc.max_send_message_length", GRPC.MAX_SEND_MESSAGE_LENGTH),
@@ -46,7 +46,7 @@ def main():
         args.job_type,
         args.minibatch_size,
         args.model_zoo,
-        channel=channel,
+        channel=master_channel,
         embedding_service_endpoint=eval(args.embedding_service_endpoint),
         dataset_fn=args.dataset_fn,
         loss=args.loss,
